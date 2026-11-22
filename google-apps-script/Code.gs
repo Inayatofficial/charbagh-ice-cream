@@ -5,7 +5,7 @@
  * Charbagh Ice Cream Kiosk & POS Web Application.
  *
  * Sheet Tabs Required:
- * 1. Menu   -> ID | Name | Category | Price | ImageURL | Status | Description
+ * 1. Menu   -> ID | Name | Category | Price | ImageURL | Status | Description | StockQty | LowStockThreshold | NameUrdu | DescriptionUrdu
  * 2. Orders -> OrderID | Timestamp | ItemsJSON | Total | PaymentType | OrderType | Status | AdminID
  * 3. Admins -> AdminID | Name | Passcode | Role
  */
@@ -16,36 +16,39 @@ const SHEET_NAMES = {
   ADMINS: 'Admins',
 };
 
+const MENU_HEADERS = [
+  'ID',
+  'Name',
+  'Category',
+  'Price',
+  'ImageURL',
+  'Status',
+  'Description',
+  'StockQty',
+  'LowStockThreshold',
+  'NameUrdu',
+  'DescriptionUrdu',
+];
+
+const ORDER_HEADERS = [
+  'OrderID',
+  'Timestamp',
+  'ItemsJSON',
+  'Total',
+  'PaymentType',
+  'OrderType',
+  'Status',
+  'AdminID',
+];
+
+const ADMIN_HEADERS = ['AdminID', 'Name', 'Passcode', 'Role'];
+
 function setupDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  ensureSheetWithHeaders(ss, SHEET_NAMES.MENU, [
-    'ID',
-    'Name',
-    'Category',
-    'Price',
-    'ImageURL',
-    'Status',
-    'Description',
-  ]);
-
-  ensureSheetWithHeaders(ss, SHEET_NAMES.ORDERS, [
-    'OrderID',
-    'Timestamp',
-    'ItemsJSON',
-    'Total',
-    'PaymentType',
-    'OrderType',
-    'Status',
-    'AdminID',
-  ]);
-
-  const adminSheet = ensureSheetWithHeaders(ss, SHEET_NAMES.ADMINS, [
-    'AdminID',
-    'Name',
-    'Passcode',
-    'Role',
-  ]);
+  ensureSheetWithHeaders(ss, SHEET_NAMES.MENU, MENU_HEADERS);
+  ensureSheetWithHeaders(ss, SHEET_NAMES.ORDERS, ORDER_HEADERS);
+  const adminSheet = ensureSheetWithHeaders(ss, SHEET_NAMES.ADMINS, ADMIN_HEADERS);
 
   if (adminSheet.getLastRow() <= 1) {
     adminSheet.appendRow(['ADM-01', 'Tariq Mahmood', '1122', 'Owner']);
@@ -63,6 +66,14 @@ function ensureSheetWithHeaders(ss, name, headers) {
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  } else {
+    const existingWidth = Math.max(sheet.getLastColumn(), 1);
+    const existingHeaders = sheet.getRange(1, 1, 1, existingWidth).getValues()[0];
+    headers.forEach(function (header, idx) {
+      if (!existingHeaders[idx]) {
+        sheet.getRange(1, idx + 1).setValue(header).setFontWeight('bold');
+      }
+    });
   }
   return sheet;
 }
@@ -73,7 +84,11 @@ function doGet(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     if (action === 'ping') {
-      return jsonResponse({ ok: true, brand: 'Charbagh Ice Cream', time: new Date().toISOString() });
+      return jsonResponse({
+        ok: true,
+        brand: 'Charbagh Ice Cream',
+        time: new Date().toISOString(),
+      });
     }
 
     if (action === 'getMenu') {
@@ -100,7 +115,14 @@ function doGet(e) {
       ok: true,
       menu: readSheetAsObjects(ss, SHEET_NAMES.MENU),
       orders: readSheetAsObjects(ss, SHEET_NAMES.ORDERS),
-      admins: readSheetAsObjects(ss, SHEET_NAMES.ADMINS),
+      admins: readSheetAsObjects(ss, SHEET_NAMES.ADMINS).map(function (a) {
+        return {
+          AdminID: a.AdminID,
+          Name: a.Name,
+          Role: a.Role,
+          Passcode: String(a.Passcode || ''),
+        };
+      }),
     });
   } catch (err) {
     return jsonResponse({ ok: false, error: err.message });
@@ -118,17 +140,8 @@ function doPost(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     if (action === 'createOrder') {
-      const sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.ORDERS, [
-        'OrderID',
-        'Timestamp',
-        'ItemsJSON',
-        'Total',
-        'PaymentType',
-        'OrderType',
-        'Status',
-        'AdminID',
-      ]);
-      const o = payload.order;
+      const sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.ORDERS, ORDER_HEADERS);
+      const o = payload.order || {};
       sheet.appendRow([
         o.OrderID,
         o.Timestamp || new Date().toISOString(),
@@ -156,26 +169,10 @@ function doPost(e) {
     }
 
     if (action === 'upsertMenuItem') {
-      const sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.MENU, [
-        'ID',
-        'Name',
-        'Category',
-        'Price',
-        'ImageURL',
-        'Status',
-        'Description',
-      ]);
-      const item = payload.item;
+      const sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.MENU, MENU_HEADERS);
+      const item = payload.item || {};
       const data = sheet.getDataRange().getValues();
-      const rowValues = [
-        item.ID,
-        item.Name,
-        item.Category,
-        Number(item.Price || 0),
-        item.ImageURL || '',
-        item.Status || 'In Stock',
-        item.Description || '',
-      ];
+      const rowValues = buildMenuRow(item);
 
       for (let i = 1; i < data.length; i++) {
         if (String(data[i][0]) === String(item.ID)) {
@@ -202,29 +199,13 @@ function doPost(e) {
     }
 
     if (action === 'seedMenu') {
-      const sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.MENU, [
-        'ID',
-        'Name',
-        'Category',
-        'Price',
-        'ImageURL',
-        'Status',
-        'Description',
-      ]);
+      const sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.MENU, MENU_HEADERS);
       const items = payload.items || [];
       if (sheet.getLastRow() > 1) {
         sheet.deleteRows(2, sheet.getLastRow() - 1);
       }
       items.forEach(function (item) {
-        sheet.appendRow([
-          item.ID,
-          item.Name,
-          item.Category,
-          Number(item.Price || 0),
-          item.ImageURL || '',
-          item.Status || 'In Stock',
-          item.Description || '',
-        ]);
+        sheet.appendRow(buildMenuRow(item));
       });
       return jsonResponse({ ok: true, count: items.length });
     }
@@ -244,12 +225,57 @@ function doPost(e) {
       });
     }
 
+    if (action === 'updateAdmins') {
+      const sheet = ensureSheetWithHeaders(ss, SHEET_NAMES.ADMINS, ADMIN_HEADERS);
+      const admins = payload.admins || [];
+      if (sheet.getLastRow() > 1) {
+        sheet.deleteRows(2, sheet.getLastRow() - 1);
+      }
+      admins.forEach(function (a) {
+        sheet.appendRow([
+          a.AdminID,
+          a.Name || '',
+          String(a.Passcode || ''),
+          a.Role || 'Manager',
+        ]);
+      });
+      return jsonResponse({ ok: true, count: admins.length });
+    }
+
     return jsonResponse({ ok: false, error: 'Unknown action: ' + action });
   } catch (err) {
     return jsonResponse({ ok: false, error: err.message });
   } finally {
     lock.releaseLock();
   }
+}
+
+function buildMenuRow(item) {
+  const status = item.Status || 'In Stock';
+  const stockQty =
+    item.StockQty !== undefined && item.StockQty !== ''
+      ? Number(item.StockQty)
+      : status === 'Sold Out'
+        ? 0
+        : 20;
+  const lowStockThreshold =
+    item.LowStockThreshold !== undefined && item.LowStockThreshold !== ''
+      ? Number(item.LowStockThreshold)
+      : 8;
+
+  return [
+    item.ID,
+    item.Name || '',
+    item.Category || 'Scoops',
+    Number(item.Price || 0),
+    item.ImageURL || '',
+    status,
+    item.Description || '',
+    stockQty,
+    lowStockThreshold,
+    item.NameUrdu || '',
+    item.DescriptionUrdu || '',
+  ];
 }
 
 function readSheetAsObjects(ss, sheetName) {

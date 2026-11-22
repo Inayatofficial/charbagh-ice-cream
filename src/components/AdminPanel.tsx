@@ -42,6 +42,15 @@ import {
   seedMenuToGas,
 } from '../utils/gasApi';
 import { readAndResizeImageFile } from '../utils/imageUpload';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 interface AdminPanelProps {
   admins: AdminUser[];
@@ -160,6 +169,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     ).length;
     const healthy = menu.length - depleted - nearDepletion;
     return { depleted, nearDepletion, needsAttention: depleted + nearDepletion, healthy };
+  }, [menu]);
+
+  const lowStockAlertItems = useMemo(() => {
+    return menu
+      .filter((m) => m.stockQty < m.lowStockThreshold)
+      .sort((a, b) => a.stockQty - b.stockQty);
   }, [menu]);
 
   // Filtered menu for manager, prioritizing low-stock / depleted items first
@@ -485,6 +500,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const dailySeries = Object.values(dailyMap).sort((a, b) => b.date.localeCompare(a.date));
     const maxDailyRevenue = dailySeries.reduce((m, d) => Math.max(m, d.revenue), 0);
 
+    // Continuous 7-day chronological series ending today for the Recharts 'Daily Sales Trend' chart
+    const [yr, mo, dy] = todayIso.split('-').map(Number);
+    const past7DaysTrend = Array.from({ length: 7 }, (_, idx) => {
+      const offsetDays = 6 - idx;
+      const d = new Date(Date.UTC(yr, mo - 1, dy - offsetDays));
+      const iso = d.toISOString().slice(0, 10);
+      const dayEntry = dailyMap[iso];
+      const shortLabel =
+        iso === todayIso
+          ? 'Today'
+          : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      return {
+        date: iso,
+        shortLabel,
+        revenue: dayEntry ? dayEntry.revenue : 0,
+        orderCount: dayEntry ? dayEntry.orderCount : 0,
+        unitsSold: dayEntry ? dayEntry.unitsSold : 0,
+      };
+    });
+    const past7DaysRevenue = past7DaysTrend.reduce((s, d) => s + d.revenue, 0);
+    const past7DaysOrders = past7DaysTrend.reduce((s, d) => s + d.orderCount, 0);
+
     return {
       todayRevenue,
       todayOrderCount: todayOrders.length,
@@ -506,6 +543,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       toppingBreakdown,
       dailySeries,
       maxDailyRevenue,
+      past7DaysTrend,
+      past7DaysRevenue,
+      past7DaysOrders,
     };
   }, [orders, menu, analyticsDateFilter, analyticsItemSort, todayIso]);
 
@@ -814,6 +854,126 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ================================================================= */}
+      {/* LOW STOCK ALERT DASHBOARD WIDGET (stockQty < lowStockThreshold)    */}
+      {/* ================================================================= */}
+      {lowStockAlertItems.length > 0 ? (
+        <div
+          role="region"
+          aria-label="Low Stock Alert"
+          data-testid="low-stock-alert-widget"
+          className="mb-6 rounded-2xl border-2 border-[#ba1a1a]/65 bg-gradient-to-br from-[#ffdad6]/55 via-[#fff4f2] to-[#fff8f5] p-5 shadow-sm"
+        >
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ba1a1a] text-white shadow-xs">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="font-display text-base font-extrabold text-[#93000a]">
+                  Low Stock Alert
+                </h2>
+                <p className="tabular-nums text-xs font-semibold text-[#93000a]/90">
+                  {lowStockAlertItems.length}{' '}
+                  {lowStockAlertItems.length === 1 ? 'item has' : 'items have'} stock quantity
+                  below threshold
+                </p>
+              </div>
+            </div>
+
+            {activeTab !== 'menu' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('menu');
+                  setStockFilter('low');
+                }}
+                className="min-h-[40px] shrink-0 cursor-pointer rounded-xl bg-[#ba1a1a] px-4 text-xs font-bold whitespace-nowrap text-white transition-colors hover:bg-[#93000a]"
+              >
+                Open Stock Manager
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {lowStockAlertItems.map((item) => {
+              const pctOfThreshold =
+                item.lowStockThreshold > 0
+                  ? Math.max(4, Math.min(100, Math.round((item.stockQty / item.lowStockThreshold) * 100)))
+                  : 0;
+              return (
+                <div
+                  key={item.id}
+                  data-testid={`low-stock-indicator-${item.id}`}
+                  className="flex flex-col justify-between gap-3 rounded-xl border-2 border-[#ba1a1a]/45 bg-white p-3.5 shadow-xs"
+                >
+                  <div className="flex items-start gap-3">
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      referrerPolicy="no-referrer"
+                      className={`h-12 w-12 shrink-0 rounded-lg bg-[#f3e6dd] object-cover ${
+                        item.stockQty <= 0 ? 'grayscale' : ''
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-bold text-[#211a15]">{item.name}</div>
+                      <div className="text-[11px] font-medium text-[#554336]">
+                        {item.id} · {item.category}
+                      </div>
+                      <div className="tabular-nums mt-1 flex items-center gap-1.5 text-xs font-extrabold text-[#ba1a1a]">
+                        <span>Qty: {item.stockQty}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-semibold text-[#93000a]/85">
+                          Threshold: {item.lowStockThreshold}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#ffdad6]">
+                      <div
+                        className="h-full rounded-full bg-[#ba1a1a]"
+                        style={{ width: `${item.stockQty <= 0 ? 0 : pctOfThreshold}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="tabular-nums text-[11px] font-bold text-[#93000a]">
+                        {item.stockQty <= 0
+                          ? 'Out of stock'
+                          : `${item.lowStockThreshold - item.stockQty} below min`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onAdjustStockQty(item.id, item.stockQty + 10)}
+                        className="tabular-nums min-h-[32px] cursor-pointer rounded-lg bg-[#2d6a4f] px-2.5 text-[11px] font-bold text-white transition-colors hover:bg-[#0e5138]"
+                      >
+                        +10 Restock
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div
+          role="region"
+          aria-label="Low Stock Alert"
+          data-testid="low-stock-alert-widget"
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#2d6a4f]/35 bg-[#aeeecb]/20 px-5 py-3.5"
+        >
+          <div className="flex items-center gap-2.5 text-xs font-bold text-[#0e5138]">
+            <Check className="h-4 w-4 shrink-0" />
+            <span>
+              Low Stock Alert · All {menu.length} menu items meet or exceed their low-stock threshold.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ================================================================= */}
       {/* TAB 1: DAILY INCOME, ANALYTICS & ORDER DETAILS                     */}
@@ -1306,6 +1466,97 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="tabular-nums mt-1.5 text-xs text-[#554336]">
                 Discounts: PKR {salesAnalytics.totalDiscounts.toLocaleString()}
               </div>
+            </div>
+          </div>
+
+          {/* Daily Sales Trend (Past 7 Days) — Recharts Line Chart */}
+          <div className="rounded-2xl border border-[#211a15]/10 bg-white p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display text-base font-extrabold text-[#211a15]">
+                  Daily Sales Trend
+                </h3>
+                <p className="text-xs text-[#554336]">
+                  Total daily revenue across the past 7 days based on recorded orders
+                </p>
+              </div>
+              <div className="tabular-nums text-right text-xs">
+                <div className="font-extrabold text-[#2d6a4f]">
+                  7-Day Total: PKR {salesAnalytics.past7DaysRevenue.toLocaleString()}
+                </div>
+                <div className="text-[#554336]">
+                  {salesAnalytics.past7DaysOrders} orders over 7 days
+                </div>
+              </div>
+            </div>
+
+            <div className="h-[280px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height={280} minWidth={0}>
+                <LineChart
+                  data={salesAnalytics.past7DaysTrend}
+                  margin={{ top: 12, right: 16, left: 4, bottom: 4 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#dbc2b0"
+                    strokeOpacity={0.55}
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="shortLabel"
+                    tick={{ fontSize: 12, fill: '#554336', fontWeight: 600 }}
+                    axisLine={{ stroke: '#dbc2b0' }}
+                    tickLine={false}
+                    dy={6}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: '#554336' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={64}
+                    tickFormatter={(val: number) =>
+                      val >= 1000
+                        ? `Rs ${Number((val / 1000).toFixed(val % 1000 === 0 ? 0 : 1))}k`
+                        : `Rs ${val}`
+                    }
+                  />
+                  <Tooltip
+                    cursor={{ stroke: '#dbc2b0', strokeWidth: 1, strokeDasharray: '3 3' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload || payload.length === 0) return null;
+                      const point = payload[0].payload as {
+                        date: string;
+                        shortLabel: string;
+                        revenue: number;
+                        orderCount: number;
+                        unitsSold: number;
+                      };
+                      return (
+                        <div className="tabular-nums rounded-xl border border-[#dbc2b0] bg-white px-3.5 py-2.5 text-xs shadow-md">
+                          <div className="font-bold text-[#211a15]">
+                            {point.date} {point.shortLabel === 'Today' ? '(Today)' : ''}
+                          </div>
+                          <div className="mt-1 font-extrabold text-[#2d6a4f]">
+                            Revenue: PKR {point.revenue.toLocaleString()}
+                          </div>
+                          <div className="mt-0.5 text-[#554336]">
+                            {point.orderCount} orders · {point.unitsSold} items sold
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="revenue"
+                    name="Daily Revenue"
+                    stroke="#d97706"
+                    strokeWidth={3}
+                    dot={{ r: 4.5, fill: '#fff8f5', stroke: '#d97706', strokeWidth: 2.5 }}
+                    activeDot={{ r: 6.5, fill: '#2d6a4f', stroke: '#ffffff', strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
 

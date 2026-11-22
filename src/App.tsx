@@ -33,6 +33,7 @@ import { SetupGuide } from './components/SetupGuide';
 import {
   deleteMenuItemFromGas,
   pullAllFromGas,
+  pushAdminsToGas,
   pushMenuItemToGas,
   pushOrderStatusToGas,
   pushOrderToGas,
@@ -400,6 +401,13 @@ export default function App() {
     }
   };
 
+  const handleUpdateAdmins = (nextAdmins: AdminUser[]) => {
+    setAdmins(nextAdmins);
+    if (gasConfig.webAppUrl) {
+      pushAdminsToGas(gasConfig.webAppUrl, nextAdmins);
+    }
+  };
+
   const handleReprintOrder = (order: Order) => {
     setActiveReceiptOrder(order);
     triggerThermalPrint();
@@ -621,7 +629,7 @@ export default function App() {
               onUpdateStorefrontSettings={setStorefrontSettings}
               onResetStorefrontSettings={() => setStorefrontSettings(DEFAULT_STOREFRONT_SETTINGS)}
               onBulkUpdateCategoryImage={handleBulkUpdateCategoryImage}
-              onUpdateAdmins={setAdmins}
+              onUpdateAdmins={handleUpdateAdmins}
               gasConfig={gasConfig}
               onUpdateGasConfig={setGasConfig}
               onOpenSetupGuide={() => setActiveView('setup')}
