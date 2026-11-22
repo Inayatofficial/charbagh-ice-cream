@@ -1,0 +1,6 @@
+{
+  "name": "Charbagh Ice Cream",
+  "description": "Touch-screen kiosk, bilingual English/Urdu ordering system, thermal receipt printer, and Google Apps Script synced POS & dual-admin management suite for Charbagh Ice Cream.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

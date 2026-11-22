@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+:root {
+  --surface: #fff8f5;
+  --surface-card: #ffffff;
+  --surface-container: #f9ebe3;
+  --surface-container-high: #f3e6dd;
+  --on-surface: #211a15;
+  --on-surface-variant: #554336;
+  --primary: #d97706;
+  --primary-deep: #8d4b00;
+  --secondary: #2d6a4f;
+  --tertiary: #e11d48;
+  --outline: #dbc2b0;
+  --receipt-bg: #f7f2e8;
+  --receipt-ink: #1c1613;
+}
+
+@layer base {
+  body {
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+    background-color: var(--surface);
+    color: var(--on-surface);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: "Epilogue", "Plus Jakarta Sans", system-ui, sans-serif;
+  }
+}
+
+.font-urdu {
+  font-family: "Noto Nastaliq Urdu", "Noto Serif", serif;
+  line-height: 2.15;
+}
+
+.font-receipt {
+  font-family: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Smooth kiosk touch scrolling */
+.kiosk-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #dbc2b0 transparent;
+}
+.kiosk-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.kiosk-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.kiosk-scroll::-webkit-scrollbar-thumb {
+  background: #dbc2b0;
+  border-radius: 9999px;
+}
+
+/* Thermal paper serrated edge pattern */
+.receipt-edge-top {
+  background-image: linear-gradient(135deg, #f7f2e8 50%, transparent 50%),
+    linear-gradient(225deg, #f7f2e8 50%, transparent 50%);
+  background-position: top left;
+  background-size: 12px 12px;
+  background-repeat: repeat-x;
+}
+
+.receipt-edge-bottom {
+  background-image: linear-gradient(315deg, #f7f2e8 50%, transparent 50%),
+    linear-gradient(45deg, #f7f2e8 50%, transparent 50%);
+  background-position: bottom left;
+  background-size: 12px 12px;
+  background-repeat: repeat-x;
+}
+
+/* =====================================================================
+   THERMAL PRINTER @media print STYLES (58mm & 80mm Roll Optimization)
+   ===================================================================== */
+@media print {
+  @page {
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .no-print,
+  #app-shell-ui {
+    display: none !important;
+  }
+
+  #thermal-print-portal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .thermal-paper-58 {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    padding: 3mm 2.5mm !important;
+    font-size: 10.5px !important;
+    line-height: 1.38 !important;
+    margin: 0 auto !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+
+  .thermal-paper-80 {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 4mm 4mm !important;
+    font-size: 12px !important;
+    line-height: 1.42 !important;
+    margin: 0 auto !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+}
